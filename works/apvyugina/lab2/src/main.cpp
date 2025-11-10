@@ -12,7 +12,6 @@ const int MATRIX_SIZE = 512;
 
 int main() {
 
-
     init_random_generator();
 
     auto A = generateMatrix<double>(MATRIX_SIZE);

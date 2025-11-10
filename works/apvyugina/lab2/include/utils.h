@@ -37,9 +37,19 @@ bool compareMatrices(const vector<vector<T>>& a, const vector<vector<T>>& b) {
     return true;
 }
 
+template<typename T>
+vector<T> flattenMatrix(const vector<vector<T>>& mat) {
+    size_t rows = mat.size();
+    size_t cols = mat.front().size();
+    vector<T> flat(rows * cols);
+    for(size_t i = 0; i < rows; ++i) {
+        memcpy(flat.data() + i * cols, mat[i].data(), cols * sizeof(T));
+    }
+    return flat;
+}
 
 template<typename T>
-void print_matrix(const vector<vector<T>>& matrix, int precision = 4) {
+void printMatrix(const vector<vector<T>>& matrix, int precision = 4) {
     cout.precision(precision);
     for (const auto& row : matrix) {
         for (const auto& value : row) {

@@ -1,15 +1,14 @@
 #include <cuda_runtime.h>
 #include <vector>
-#include <chrono>
 
 #include "utils.h"
-
+#include "kernel_launcher.h"
 
 using namespace std;
 
 
 __global__ 
-void matrixMultiplication(float* A, float* B, float* C, int matrix_size) {
+void simpleMatrixMultiplication(float* A, float* B, float* C, int matrix_size) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -23,52 +22,62 @@ void matrixMultiplication(float* A, float* B, float* C, int matrix_size) {
 }
 
 
-double multiplyMatrices(
-    vector<vector<float>> &A, vector<vector<float>> &B,vector<vector<float>> &C, int blockDim
-){
-    int matrix_size = A.size();
+__global__ 
+void sharedMatrixMultiplication(float* A, float* B, float* C, int matrix_size) {
+    __shared__ float As[BLOCK_DIM][BLOCK_DIM];
+    __shared__ float Bs[BLOCK_DIM][BLOCK_DIM];
 
-    float *A_device, *B_device, *res_device;
-    cudaMalloc(&A_device, matrix_size * matrix_size * sizeof(float));
-    cudaMalloc(&B_device, matrix_size * matrix_size * sizeof(float));
-    cudaMalloc(&res_device, matrix_size * matrix_size * sizeof(float));
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Копируем матрицы на устройство
-    cudaMemcpy(A_device, &A[0][0], matrix_size * matrix_size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(B_device, &B[0][0], matrix_size * matrix_size * sizeof(float), cudaMemcpyHostToDevice);
+    float acc = 0.0f;
 
-    // Определяем размер блока и сетки
-    dim3 blockSize(blockDim, blockDim);
-    dim3 gridSize((matrix_size + blockSize.x - 1) / blockSize.x, (matrix_size + blockSize.y - 1) / blockSize.y);
+    for (int m = 0; m < (matrix_size + BLOCK_DIM - 1)/BLOCK_DIM; ++m) {
+        if (row < matrix_size && threadIdx.x + m * BLOCK_DIM < matrix_size) {
+            As[threadIdx.y][threadIdx.x] = A[row * matrix_size + threadIdx.x + m * BLOCK_DIM];
+        } else {
+            As[threadIdx.y][threadIdx.x] = 0.0f;
+        }
 
-    // Запускаем ядро
-    auto start_time = chrono::high_resolution_clock::now();
-    matrixMultiplication<<<gridSize, blockSize>>>(A_device, B_device, res_device, matrix_size);
-    chrono::duration<double> elapsed = chrono::high_resolution_clock::now() - start_time;
+        if (col < matrix_size && threadIdx.y + m * BLOCK_DIM < matrix_size) {
+            Bs[threadIdx.y][threadIdx.x] = B[(threadIdx.y + m * BLOCK_DIM) * matrix_size + col];
+        } else {
+            Bs[threadIdx.y][threadIdx.x] = 0.0f;
+        }
 
-    cudaDeviceSynchronize();
-    cudaMemcpy(&C[0][0], res_device, matrix_size * matrix_size * sizeof(float), cudaMemcpyDeviceToHost);
+        __syncthreads();
 
-    // Освобождаем память устройства
-    cudaFree(A_device);
-    cudaFree(B_device);
-    cudaFree(res_device);
+        for (int k = 0; k < BLOCK_DIM; ++k) {
+            acc += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+        }
 
-    return elapsed.count()
+        __syncthreads();
+    }
+
+    if (row < matrix_size && col < matrix_size) {
+        C[row * matrix_size + col] = acc;
+    }
 }
+
+
 
 int main(){
 
     init_random_generator();
 
-    int MATRIX_SIZE = 16;
-    auto A = generateMatrix<double>(MATRIX_SIZE);
-    auto B = generateMatrix<double>(MATRIX_SIZE);
+    int MATRIX_SIZE = 2048;
+    auto A = generateMatrix<float>(MATRIX_SIZE);
+    auto B = generateMatrix<float>(MATRIX_SIZE);
 
-    vector<vector<double>> res(MATRIX_SIZE, vector<double>(MATRIX_SIZE));
-    double elapsed = multiplyMatrices<double>(A, B, res, 4);
+    vector<vector<float>> res(MATRIX_SIZE, vector<float>(MATRIX_SIZE));
+    double elapsed = multiplyMatrices(simpleMatrixMultiplication, A, B, res);
     cout << "Простое умножение заняло: " << elapsed << " секунд.\n";
 
+    vector<vector<float>> shared_res(MATRIX_SIZE, vector<float>(MATRIX_SIZE));
+    elapsed = multiplyMatrices(sharedMatrixMultiplication, A, B, shared_res);
+    cout << "Умножение через shared_memory заняло: " << elapsed << " секунд.\n";
 
+    bool areEqual = compareMatrices(res, shared_res);
+    cout << "Матрицы равны: " << areEqual << endl;
     return 0;
 }
