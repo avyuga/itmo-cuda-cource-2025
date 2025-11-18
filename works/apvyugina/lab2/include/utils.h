@@ -15,10 +15,10 @@ inline void init_random_generator() {
 }
 
 template<typename T>
-vector<vector<T>> generateMatrix(int matrix_size){
-    vector<vector<T>> matrix(matrix_size, vector<T>(matrix_size));
-    for (int i = 0; i < matrix_size; ++i) {
-        for (int j = 0; j < matrix_size; ++j) {
+vector<vector<T>> generateMatrix(int M, int N){
+    vector<vector<T>> matrix(M, vector<T>(N));
+    for (int i = 0; i < M; ++i) {
+        for (int j = 0; j < N; ++j) {
             matrix[i][j] = static_cast<T>(rand()) / RAND_MAX;
         }
     }
