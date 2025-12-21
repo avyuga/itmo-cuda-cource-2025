@@ -57,8 +57,9 @@ public:
 
     bool getBatch(void* bindings[], const char* names[], int nbBindings) noexcept override
     {
-        std::cout << "Getting batches" << std::endl;
+        std::cout << "Getting batches (current: " << mCurrentBatch << ", total: " << mCalibrationImages.size() << ")" << std::endl;
 
+        // Check if we have enough images for at least one batch
         if (mCurrentBatch >= mCalibrationImages.size())
         {
             return false; // No more batches
@@ -88,10 +89,11 @@ public:
         }
 
         // Copy current batch to GPU
+        // For dynamic shapes with INT8, always provide full batch size (padding with zeros if needed)
         size_t actualBatchSize = std::min(mBatchSize, static_cast<int>(mCalibrationImages.size() - mCurrentBatch));
         size_t imageSize = mInputChannels * mInputHeight * mInputWidth * sizeof(float);
         
-        // Clear the entire buffer first (important for partial batches)
+        // Clear the entire buffer first (important for partial batches - zeros will pad)
         cudaMemset(mDeviceInput, 0, mBatchSize * imageSize);
         
         // Copy images to GPU
@@ -133,7 +135,7 @@ public:
         }
         
         mCurrentBatch += actualBatchSize;
-        std::cout << "finished getting batches" << std::endl;
+        std::cout << "Finished getting batch of size " << actualBatchSize << " (requested " << mBatchSize << ")" << std::endl;
 
         return true;
     }

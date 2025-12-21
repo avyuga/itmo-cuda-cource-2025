@@ -111,6 +111,7 @@ class DetectionModelTRT{
     
         bool build();
         bool load();
+        bool prepareEngine();
         void detect(
             std::vector<cimg_library::CImg<float>> img_list, 
             float*& rawOutput

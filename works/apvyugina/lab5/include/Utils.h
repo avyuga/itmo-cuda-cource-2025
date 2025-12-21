@@ -86,6 +86,7 @@ class Utility{
         );
         static std::vector<std::vector<Detection>> processOutput(float* output, int numImages, Params params);
         static void logInference(Params p, const char* engine, int maxBatchSize, std::vector<double> data);
+        static Params createDefaultParams(const char* onnxFileName);  // Add this line
 };
 
 

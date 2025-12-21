@@ -1,31 +1,35 @@
 #include "DetectionModelTRT.h"
 #include "Timers.h"
+#include <opencv2/opencv.hpp>
+#include <cstring>
+
+using namespace std;
 
 void Logger::log(Severity severity, const char* msg) noexcept
 {
     // Only log Warnings or more important.
     if (severity <= Severity::kWARNING)
-        std::cout << msg << std::endl;
+        cout << msg << endl;
 }
 
 
 bool DetectionModelTRT::build(){
 
-    std::ifstream file(mParams.engineFileName, std::ios::binary);
+    ifstream file(mParams.engineFileName, ios::binary);
     if (file.good()){
-        std::cout << "Engine file with such name `" << mParams.engineFileName << "` already exists, exiting." << std::endl;
+        cout << "Engine file with such name `" << mParams.engineFileName << "` already exists, exiting." << endl;
         return true;
     }
     
-    auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(this->logger));
+    auto builder = unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(this->logger));
     assert(builder != nullptr);
     
     auto explicitBatch = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
+    auto network = unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
     assert(network != nullptr);
 
     
-    auto config = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    auto config = unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
     assert(config != nullptr);
 
     if (mParams.fp16) config->setFlag(BuilderFlag::kFP16);
@@ -34,7 +38,7 @@ bool DetectionModelTRT::build(){
 
     enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    auto parser = std::unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, this->logger));
+    auto parser = unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, this->logger));
     assert(parser != nullptr);
     
     auto parsed = parser->parseFromFile(mParams.onnxFileName.c_str(),
@@ -44,7 +48,7 @@ bool DetectionModelTRT::build(){
     const auto input = network->getInput(0);
     const auto inputName = input->getName();
 
-    // Specify the optimization profile
+    // Specify the optimization profile with dynamic batch sizes
     nvinfer1::IOptimizationProfile* optProfile = builder->createOptimizationProfile();
     optProfile->setDimensions(inputName, nvinfer1::OptProfileSelector::kMIN, nvinfer1::Dims4(1, mParams.inputNChannels, mParams.inputHeight, mParams.inputWidth));
     optProfile->setDimensions(inputName, nvinfer1::OptProfileSelector::kOPT, nvinfer1::Dims4(8, mParams.inputNChannels, mParams.inputHeight, mParams.inputWidth));
@@ -54,10 +58,13 @@ bool DetectionModelTRT::build(){
     if (mParams.int8) {
         // Use calibrator if calibration data path is provided
         if (!mParams.calibrationDataPath.empty()) {
-            std::cout << "Creating calibrator" << std::endl;
-            mCalibrator = std::make_unique<Int8EntropyCalibrator2>(
+            cout << "Creating calibrator" << endl;
+            // Set calibration profile explicitly for dynamic shapes
+            // Calibration uses the OPT profile dimension (batch size 8)
+            config->setCalibrationProfile(optProfile);
+            mCalibrator = make_unique<Int8EntropyCalibrator2>(
                 mParams.calibrationDataPath,
-                1, // batch size for calibration (usually 1)
+                8, // batch size for calibration - must match OPT profile dimension
                 mParams.inputHeight,
                 mParams.inputWidth,
                 mParams.inputNChannels,
@@ -81,23 +88,23 @@ bool DetectionModelTRT::build(){
     
     config->setProfileStream(profileStream);
 
-    std::unique_ptr<IHostMemory> plan {builder->buildSerializedNetwork(*network, *config)};
+    unique_ptr<IHostMemory> plan {builder->buildSerializedNetwork(*network, *config)};
     assert(plan != nullptr);
     
 
-    auto runtime = std::shared_ptr<nvinfer1::IRuntime>(createInferRuntime(this->logger), InferDeleter());
+    auto runtime = shared_ptr<nvinfer1::IRuntime>(createInferRuntime(this->logger), InferDeleter());
     assert(runtime != nullptr);
 
 
-    auto engine = std::shared_ptr<nvinfer1::ICudaEngine>(
+    auto engine = shared_ptr<nvinfer1::ICudaEngine>(
         runtime->deserializeCudaEngine(plan->data(), plan->size()), InferDeleter());
     assert(engine != nullptr);
 
 
     // save engine to binary file
-    std::ofstream outfile(mParams.engineFileName, std::ofstream::binary);
+    ofstream outfile(mParams.engineFileName, ofstream::binary);
     outfile.write(reinterpret_cast<const char*>(plan->data()), plan->size());
-    std::cout << "Success, saved engine to " << mParams.engineFileName << std::endl;
+    cout << "Success, saved engine to " << mParams.engineFileName << endl;
     cudaStreamDestroy(profileStream);
 
     return true;
@@ -105,10 +112,10 @@ bool DetectionModelTRT::build(){
 
 
 bool DetectionModelTRT::load(){
-    std::vector<char> trtModelStream_;
+    vector<char> trtModelStream_;
     size_t size{0};
     
-    std::ifstream file(mParams.engineFileName, std::ios::binary);
+    ifstream file(mParams.engineFileName, ios::binary);
     assert(file.good());
     
     file.seekg(0, file.end);
@@ -120,13 +127,13 @@ bool DetectionModelTRT::load(){
     file.close();
     
     
-    mRuntime = std::shared_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(this->logger));
+    mRuntime = shared_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(this->logger));
     assert(mRuntime);
     
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(trtModelStream_.data(), size));
+    mEngine = shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(trtModelStream_.data(), size));
     assert(mEngine);
 
-    mContext = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    mContext = unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     assert(mContext);
     
     return true;
@@ -135,7 +142,7 @@ bool DetectionModelTRT::load(){
 
 
 void DetectionModelTRT::detect(
-    std::vector<cimg_library::CImg<float>> imgList, 
+    vector<cimg_library::CImg<float>> imgList, 
     float*& rawOutput
 ){
     
@@ -159,7 +166,7 @@ void DetectionModelTRT::detect(
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     for (int i=0; i<imgList.size(); ++i){
         auto img = imgList[i];
-        std::copy(img.data(), img.data() + img.size(), hostDataBuffer + i*img.size());
+        copy(img.data(), img.data() + img.size(), hostDataBuffer + i*img.size());
     }
 
     // Memcpy from host input buffers to device input buffers
@@ -172,7 +179,17 @@ void DetectionModelTRT::detect(
     buffers.copyOutputToHostAsync(stream);
     cudaStreamSynchronize(stream);
     
-    rawOutput = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
+    // Calculate output size and copy data to persistent buffer
+    size_t outputSize = mParams.outputLength * mParams.outputItemSize * imgList.size();
+    if (rawOutput == nullptr) {
+        rawOutput = new float[outputSize];
+    }
+    void* hostOutputBuffer = buffers.getHostBuffer(mParams.outputTensorNames[0]);
+    if (hostOutputBuffer != nullptr) {
+        memcpy(rawOutput, hostOutputBuffer, outputSize * sizeof(float));
+    }
+    
+    cudaStreamDestroy(stream);
 }
 
 DetectionModelTRT::~DetectionModelTRT(){
@@ -186,78 +203,73 @@ void DetectionModelTRT::exit(){
 }
 
 
+bool DetectionModelTRT::prepareEngine() {
+    std::cout << "Building and running a GPU inference engine for " << mParams.onnxFileName << std::endl;
+    
+    bool status = build();
+    std::cout << std::boolalpha << "Build Engine with status " << status << std::endl;
+    
+    if (!status) {
+        return false;
+    }
+    
+    status = load();
+    std::cout << std::boolalpha << "Load Engine with status " << status << std::endl;
+    
+    return status;
+}
+
+
 int main(int argc, char** argv)
 {
     char* onnxFileName = argv[1];
 
-    std::filesystem::path onnxFilePath(onnxFileName);
-    std::string engineFileName = onnxFilePath.replace_extension("engine").string();
+    filesystem::path onnxFilePath(onnxFileName);
+    string engineFileName = onnxFilePath.replace_extension("engine").string();
   
-    Params params;
-    
-    params.onnxFileName = onnxFileName;
-    params.engineFileName = engineFileName.c_str();
-    
-    params.inputTensorNames.push_back("images");
-    params.outputTensorNames.push_back("output0");   
-
-    params.dlaCore = -1; // not supported on the server
-    params.int8 = true;
-    params.fp16 = false;
-    params.bf16 = false;
-
-    params.inputHeight = 640;
-    params.inputWidth = 640;
-    params.inputNChannels = 3;
-
-    params.outputLength = 300;
-    params.outputItemSize = 6;
-
-    params.calibrationDataPath = "assets/";  // Use same images or dedicated calibration set
-    params.calibrationCacheFile = "calibration.cache";
-    
+    Params params = Utility::createDefaultParams(onnxFileName);
     DetectionModelTRT Engine(params);
 
-    std::cout << "Building and running a GPU inference engine for " << onnxFileName << std::endl;
-    auto status = Engine.build();
-    std::cout << std::boolalpha << "Build Engine with status " << status << std::endl;
+    bool status = Engine.prepareEngine();
+    if (!status) {
+        cerr << "Failed to prepare engine" << endl;
+        return 1;
+    }
     
-    status = Engine.load();
-    std::cout << std::boolalpha << "Load Engine with status " << status << std::endl;
-    
-    const std::filesystem::path img_path{"assets/"};
-    std::vector<cimg_library::CImg<float>> fullImgList = Utility::processInput(params, img_path);
+    const filesystem::path img_path{"assets/"};
+    vector<cimg_library::CImg<float>> fullImgList = Utility::processInput(params, img_path);
     int numberOfImages = fullImgList.size();
-    std::cout << "Total number of Images: " << numberOfImages << std::endl;
-    std::cout << std::endl;
+    cout << "Total number of Images: " << numberOfImages << endl;
+    cout << endl;
 
-    std::mt19937 randomRange(std::random_device{}());
+    mt19937 randomRange(random_device{}());
     Timer timer;
 
 
-    int batchSize = 8;
-    std::vector<cimg_library::CImg<float>> randomBatch(batchSize);
+    int batchSize = 3;
+    vector<cimg_library::CImg<float>> randomBatch(batchSize);
     float* rawOutput = nullptr;
 
-    std::vector<double> timePerBatch;
-    std::sample(fullImgList.begin(), fullImgList.end(), randomBatch.begin(), batchSize, randomRange);
+    vector<double> timePerBatch;
+    sample(fullImgList.begin(), fullImgList.end(), randomBatch.begin(), batchSize, randomRange);
 
     timer.tic();
     Engine.detect(randomBatch, rawOutput);
     double diff = timer.toc();
-    std::cout << "Batch size=" << batchSize << " took " << diff  << " ms, "  <<
-        diff/batchSize << " ms/img" << std::endl;
+    cout << "Batch size=" << batchSize << " took " << diff  << " ms, "  <<
+        diff/batchSize << " ms/img" << endl;
 
-    std::vector<std::vector<Detection>> resultList = Utility::processOutput(rawOutput, batchSize, params);
+    vector<vector<Detection>> resultList = Utility::processOutput(rawOutput, batchSize, params);
         
     assert(batchSize == resultList.size());
     for(int i = 0; i < batchSize; ++i){
         auto img = randomBatch[i];
         auto result = resultList[i];
 
-        std::string filename = "results/trt/" + std::to_string(i) + ".png";
+        string filename = "results/trt/" + to_string(i) + ".png";
         Utility::drawResult(img, result, filename.c_str());
     }
     
+    delete[] rawOutput;
     return 0;
 }

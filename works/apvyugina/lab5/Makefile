@@ -10,4 +10,7 @@ drop_engine:
 
 run:
 	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)
-	./build/DetectionModelTRT models/yolov10s_dyn.onnx 
+	rm output.log
+	./build/DetectionModelTRT models/yolov10s_dyn.onnx > output.log
+
+.PHONY: build drop_engine run

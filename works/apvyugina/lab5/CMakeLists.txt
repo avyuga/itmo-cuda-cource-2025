@@ -16,6 +16,7 @@ find_path(CUDA_INCLUDE_DIR cuda_runtime.h
 )
 MESSAGE(STATUS "Found CUDA headers at ${CUDA_INCLUDE_DIR}")
 
+
 # TensorRT
 if (NOT TENSORRT_ROOT)
     set(TENSORRT_ROOT "/home/anastasia/TensorRT-10.14.1.48")
@@ -43,7 +44,15 @@ find_library(TENSORRT_LIBRARY_ONNXPARSER nvonnxparser
 MESSAGE(STATUS "Found NvONNXParser at ${TENSORRT_LIBRARY_ONNXPARSER}")
 
 
-set(CUDART /usr/lib/x86_64-linux-gnu/libcudart.so)
+# OpenCV
+find_path(OPENCV_INCLUDE_DIRS NAMES "opencv2/core.hpp" HINTS "/usr/local/include/opencv4")
+MESSAGE(STATUS "Found OpenCV headers at ${OPENCV_INCLUDE_DIRS}")
+
+find_library(OPENCV_CORE_LIB NAMES "opencv_core" HINTS "/usr/local/lib")
+MESSAGE(STATUS "Found OpenCV_CoreLib at ${OPENCV_CORE_LIB}")
+
+
+set(CUDART "/usr/lib/x86_64-linux-gnu/libcudart.so")
 
 set(PNG_LIB "/usr/lib/x86_64-linux-gnu/libpng16.so")
 set(PNG_INCLUDE "/usr/include/")
@@ -58,12 +67,12 @@ add_executable(${TARGET_TRT} "${CMAKE_SOURCE_DIR}/src/DetectionModelTRT.cpp" "${
 target_link_libraries(${TARGET_TRT} 
   ${CUDART}
   ${TENSORRT_LIBRARY_INFER} ${TENSORRT_LIBRARY_INFER_PLUGIN} ${TENSORRT_LIBRARY_ONNXPARSER}
-  ${PNG_LIB}
+  ${OPENCV_CORE_LIB} ${PNG_LIB}
 )
 
 target_include_directories(${TARGET_TRT} 
     PUBLIC 
-        ${TENSORRT_INCLUDE_DIR} ${CUDA_INCLUDE_DIR} ${PNG_INCLUDE}
+        ${TENSORRT_INCLUDE_DIR} ${CUDA_INCLUDE_DIR} ${OPENCV_INCLUDE_DIRS} ${PNG_INCLUDE}
     PRIVATE
         "${CMAKE_SOURCE_DIR}/include"
 )

@@ -56,11 +56,12 @@ std::vector<std::vector<Detection>> Utility::processOutput(float* output, int nu
             }
             if (output[i * floatsPerImage + j * params.outputItemSize + 4] < 0.6) continue;
             row_ptr = i * floatsPerImage + j * params.outputItemSize;
+            // Scale normalized coordinates (0-1) to pixel coordinates
             result.push_back(
                 Detection(
-                    BBox(output[row_ptr], output[row_ptr+1], output[row_ptr+2], output[row_ptr+3]), 
+                    BBox(output[row_ptr], output[row_ptr+1], output[row_ptr+2], output[row_ptr+3]),
                     output[row_ptr+4], 
-                    output[row_ptr+5]
+                    static_cast<int>(output[row_ptr+5])
                 )
             );
             
@@ -119,4 +120,34 @@ void Utility::logInference(Params p, const char* engine, int maxBatchSize, std::
 	std::copy(data.begin(), data.end(), std::experimental::ostream_joiner(outputFile, ','));
     outputFile << "\n";
 	outputFile.close();
+}
+
+Params Utility::createDefaultParams(const char* onnxFileName) {
+    Params params;
+    
+    std::filesystem::path onnxFilePath(onnxFileName);
+    std::string engineFileName = onnxFilePath.replace_extension("engine").string();
+    
+    params.onnxFileName = onnxFileName;
+    params.engineFileName = engineFileName;
+    
+    params.inputTensorNames.push_back("images");
+    params.outputTensorNames.push_back("output0");   
+    
+    params.dlaCore = -1; // not supported on the server
+    params.int8 = true;
+    params.fp16 = false;
+    params.bf16 = false;
+    
+    params.inputHeight = 640;
+    params.inputWidth = 640;
+    params.inputNChannels = 3;
+    
+    params.outputLength = 300;
+    params.outputItemSize = 6;
+    
+    params.calibrationDataPath = "assets/"; 
+    params.calibrationCacheFile = "models/calibration.cache";
+    
+    return params;
 }
