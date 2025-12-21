@@ -2,6 +2,7 @@
 
 assets/
 models/
+videos/
 *.png
 executables/
 build/

@@ -2,45 +2,26 @@
 
 using namespace std;
 
-vector<cv::Mat> Utility::processInput(Params p, const filesystem::path img_folder){
-    vector<cv::Mat> preprocessedImgList;
-    for (auto const& dir_entry : filesystem::directory_iterator{img_folder}){
-        if (filesystem::is_directory(dir_entry)) continue;
-        
-        // Load image as BGR (OpenCV default)
-        cv::Mat image = cv::imread(dir_entry.path().string(), cv::IMREAD_COLOR);
-        if (image.empty()) continue;
-        assert(image.channels() == 3);
 
-        // Convert BGR to RGB
-        cv::Mat image_rgb;
-        cv::cvtColor(image, image_rgb, cv::COLOR_BGR2RGB);
+cv::Mat Utility::processMat(Params p, cv::Mat image){
+    cv::Mat image_rgb;
+    cv::cvtColor(image, image_rgb, cv::COLOR_BGR2RGB);
 
-        // Resize FIRST on uint8 (matches CImg behavior - resize before normalization)
-        // Use INTER_LINEAR to match CImg's default resize interpolation
-        cv::Mat resized;
-        cv::resize(image_rgb, resized, cv::Size(p.inputWidth, p.inputHeight), 0, 0, cv::INTER_LINEAR);
+    cv::Mat resized;
+    cv::resize(image_rgb, resized, cv::Size(p.inputWidth, p.inputHeight), 0, 0, cv::INTER_LINEAR);
 
-        // Normalize to [0, 1] float range AFTER resize (matches CImg normalize(0.0F, 1.0F))
-        cv::Mat normalized;
-        resized.convertTo(normalized, CV_32F, 1.0 / 255.0);
+    cv::Mat normalized;
+    resized.convertTo(normalized, CV_32F, 1.0 / 255.0);
 
-        assert(normalized.rows == p.inputHeight && normalized.cols == p.inputWidth && normalized.channels() == p.inputNChannels);
-        
-        // Ensure contiguous memory layout
-        cv::Mat final_img = normalized.clone();
-
-        preprocessedImgList.push_back(final_img);
-
-    }
-    return preprocessedImgList;
+    assert(normalized.rows == p.inputHeight && normalized.cols == p.inputWidth && normalized.channels() == p.inputNChannels);
+    
+    return normalized.clone();
 };
 
 
-void Utility::drawResult(
+cv::Mat Utility::drawResult(
     cv::Mat img, 
-    vector<Detection> detections, 
-    const char* file_name
+    vector<Detection> detections
 ){
     // Convert from [0,1] float RGB to [0,255] uchar BGR for display
     cv::Mat img_display;
@@ -66,8 +47,9 @@ void Utility::drawResult(
                      textPos + cv::Point(textSize.width, -textSize.height), bgColor, -1);
         cv::putText(img_bgr, label, textPos, cv::FONT_HERSHEY_SIMPLEX, 0.5, textColor, 1);
     }
+    return img_bgr;
 
-    cv::imwrite(file_name, img_bgr);
+    // cv::imwrite(file_name, img_bgr);
 };
 
 

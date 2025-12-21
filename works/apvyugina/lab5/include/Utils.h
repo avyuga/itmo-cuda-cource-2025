@@ -69,11 +69,10 @@ class Detection{
 
 class Utility{
     public:
-        static std::vector<cv::Mat> processInput(Params p, const std::filesystem::path img_folder);
-        static void drawResult(
+        static cv::Mat processMat(Params p, cv::Mat image);
+        static cv::Mat drawResult(
             cv::Mat img, 
-            std::vector<Detection> detections, 
-            const char* file_name
+            std::vector<Detection> detections
         );
         static std::vector<std::vector<Detection>> processOutput(
             float* output, 

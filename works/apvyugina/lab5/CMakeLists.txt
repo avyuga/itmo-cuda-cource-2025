@@ -66,7 +66,11 @@ set_property(GLOBAL PROPERTY LINKER_LANGUAGE CXX)
 
 ### TRT Specific
 set(TARGET_TRT "DetectionModelTRT")
-add_executable(${TARGET_TRT} "${CMAKE_SOURCE_DIR}/src/DetectionModelTRT.cpp" "${CMAKE_SOURCE_DIR}/src/Utility.cpp")
+add_executable(${TARGET_TRT} 
+  "${CMAKE_SOURCE_DIR}/src/main.cpp" 
+  "${CMAKE_SOURCE_DIR}/src/DetectionModelTRT.cpp" 
+  "${CMAKE_SOURCE_DIR}/src/Utility.cpp"
+)
 
 
 target_link_libraries(${TARGET_TRT} 
