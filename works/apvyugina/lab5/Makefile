@@ -8,9 +8,14 @@ build:
 drop_engine:
 	rm -rf models/*.engine
 
-run:
+run_video:
 	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)
 	rm output.log
-	./build/DetectionModelTRT models/yolov10s_dyn.onnx > output.log
+	./build/DetectionModelTRT models/yolov10s_dyn.onnx video videos/v_J41d0cHAfSM_c008.mp4 > output.log
 
-.PHONY: build drop_engine run
+run_images:
+	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)
+	rm output.log
+	./build/DetectionModelTRT models/yolov10s_dyn.onnx images assets/ > output.log
+
+.PHONY: build drop_engine run_images run_video

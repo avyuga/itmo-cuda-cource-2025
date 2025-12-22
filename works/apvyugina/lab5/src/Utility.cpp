@@ -63,12 +63,6 @@ vector<vector<Detection>> Utility::processOutput(float* output, int numImages, P
     for (int i=0; i < numImages; ++i){
         vector<Detection> result;
         for (int j=0; j < params.outputLength; ++j){
-            if (j==0){
-                for (int k=0; k < params.outputItemSize; ++k){
-                    cout << output[i * floatsPerImage + j * params.outputItemSize + k] << " ";
-                }
-                cout << endl;
-            }
             if (output[i * floatsPerImage + j * params.outputItemSize + 4] < 0.5) continue;
             row_ptr = i * floatsPerImage + j * params.outputItemSize;
             // Scale normalized coordinates (0-1) to pixel coordinates
@@ -79,12 +73,6 @@ vector<vector<Detection>> Utility::processOutput(float* output, int numImages, P
                     static_cast<int>(output[row_ptr+5])
                 )
             );
-            
-            for (int k=0; k < params.outputItemSize; ++k){
-                cout << output[row_ptr + k] << " ";
-            }
-            cout << endl;
-            
             
         }
         resultList.push_back(result);

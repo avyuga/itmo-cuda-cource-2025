@@ -33,16 +33,11 @@ void detectOnRandomImages(
     int numberOfImages = preprocessedImgList.size();
     cout << "Total number of Images in directory: " << numberOfImages << endl;
 
-
-    mt19937 randomRange(random_device{}());
     Timer timer;
     float* rawOutput = nullptr;
 
-    vector<cv::Mat> randomBatch(batchSize);
-    sample(preprocessedImgList.begin(), preprocessedImgList.end(), randomBatch.begin(), batchSize, randomRange);
-
     timer.tic();
-    engine.detect(randomBatch, rawOutput);
+    engine.detect(preprocessedImgList, rawOutput);
     double diff = timer.toc();
     cout << "Batch size=" << batchSize << " took " << diff  << " ms, "  <<
         diff/batchSize << " ms/img" << endl;
@@ -50,7 +45,7 @@ void detectOnRandomImages(
     vector<vector<Detection>> resultList = Utility::processOutput(rawOutput, batchSize, p, confThreshold);
         
     for(int i = 0; i < batchSize; ++i){
-        auto img = randomBatch[i];
+        auto img = preprocessedImgList[i];
         auto result = resultList[i];
 
         string filename = outputImageFolder + to_string(i) + ".png";
@@ -58,6 +53,7 @@ void detectOnRandomImages(
         cv::imwrite(filename, resultImage);
     }
 }
+
 
 void detectOnVideo(
     const string& inputVideoPath, 
@@ -72,10 +68,10 @@ void detectOnVideo(
     cv::Mat frame;
     vector<cv::Mat> framesBatch;
 
+    cv::Size size(cap.get(cv::CAP_PROP_FRAME_WIDTH), cap.get(cv::CAP_PROP_FRAME_HEIGHT));
     cv::VideoWriter writer(outputVideoPath, 
-                       static_cast<int>(cap.get(cv::CAP_PROP_FOURCC)), 
-                       cap.get(cv::CAP_PROP_FPS),
-                       cv::Size(cap.get(cv::CAP_PROP_FRAME_WIDTH), cap.get(cv::CAP_PROP_FRAME_HEIGHT)));
+                       cv::VideoWriter::fourcc('M','J','P','G'), 
+                       cap.get(cv::CAP_PROP_FPS), size);
     
     int currentBS;
     vector<cv::Mat> preprocessedFrames;
@@ -90,21 +86,25 @@ void detectOnVideo(
 
             preprocessedFrames.reserve(currentBS);
             processedFrames.reserve(currentBS);
-
+            cv::Mat preprocessed_frame;
+            cv::Mat convertedFrame;
             for (const auto& frame: framesBatch){
-                preprocessedFrames.push_back(Utility::processMat(p, frame));
+                preprocessed_frame = Utility::processMat(p, frame);
+                preprocessedFrames.push_back(preprocessed_frame);
             }
+
             float* rawOutput = nullptr;
             engine.detect(preprocessedFrames, rawOutput);
 
             vector<vector<Detection>> resultList = Utility::processOutput(
                 rawOutput, preprocessedFrames.size(), p, confThreshold
             );
-
+        
             for (size_t i = 0; i < currentBS && i < resultList.size(); ++i) {
-                processedFrames.push_back(
-                    Utility::drawResult(framesBatch[i], resultList[i])
-                );
+                cv::Mat processed_frame = Utility::drawResult(preprocessedFrames[i], resultList[i]);
+                cv::Mat resized_frame;
+                cv::resize(processed_frame, resized_frame, size);
+                processedFrames.push_back(resized_frame);
             }
 
             for (const auto& img : processedFrames) {
@@ -123,10 +123,29 @@ void detectOnVideo(
 
 
 int main(int argc, char** argv)
-{
-    char* onnxFileName = argv[1];
+{   
+    if (argc != 4){
+        cerr << "Usage: " << argv[0] << "onnxFileName images|video /path/to/directory_or_video\n";
+        return 1;  
+    }
 
+    char* onnxFileName = argv[1];
     filesystem::path onnxFilePath(onnxFileName);
+
+    const std::string type(argv[2]);
+    const std::string path(argv[3]);
+
+    // Проверяем первый аргумент на валидность
+    if ((type != "images") && (type != "video")) {
+        cerr << "Error: First argument must be 'images' or 'video'\n";
+        return 1;
+    }
+
+    if (!filesystem::exists(path)) {
+        cerr << "Error: Path '" << path << "' does not exist.\n";
+        return 1;
+    }
+
   
     Params params = Utility::createDefaultParams(onnxFileName);
     cout << "Building Engine with params:\n"
@@ -147,22 +166,25 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    // detectOnRandomImages(
-    //     "assets/",
-    //     "results/trt/",
-    //     Engine,
-    //     params,
-    //     0.6,
-    //     10
-    // );
+    if (type == "images"){
+        detectOnRandomImages(
+            path,
+            "results/trt/",
+            Engine,
+            params,
+            0.6,
+            10
+        );
+    }
+    else if (type == "video"){
+        detectOnVideo(
+            path,
+            "videos/processed.avi",
+            Engine,
+            params, 
+            0.5
+        );
+    }
 
-    detectOnVideo(
-        "videos/kittens.mov",
-        "videos/processed.mov",
-        Engine,
-        params, 
-        0.5
-    );
-    
     return 0;
 }
