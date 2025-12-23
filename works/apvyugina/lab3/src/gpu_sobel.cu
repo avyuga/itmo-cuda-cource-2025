@@ -4,6 +4,18 @@
 #include "image_utils.h"
 #include <cuda_runtime.h>
 
+// Константные маски Собеля в постоянной памяти
+__constant__ float gx_const[3][3] = {
+    {-1.f, 0.f, 1.f},
+    {-2.f, 0.f, 2.f},
+    {-1.f, 0.f, 1.f}
+};
+
+__constant__ float gy_const[3][3] = {
+    {-1.f, -2.f, -1.f},
+    {0.f, 0.f, 0.f},
+    {1.f, 2.f, 1.f}
+};
 
 __global__ void sobelFilterTexture(float* output, cudaTextureObject_t texObj, int width, int height) {
     // Текущие индексы блока и нити
@@ -11,17 +23,6 @@ __global__ void sobelFilterTexture(float* output, cudaTextureObject_t texObj, in
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
     if(x >= width || y >= height) return;
-
-    // Маски Собеля
-    __shared__ float gx[3][3], gy[3][3];
-
-    gx[0][0] = -1.f; gx[0][1] = 0.f; gx[0][2] = 1.f;
-    gx[1][0] = -2.f; gx[1][1] = 0.f; gx[1][2] = 2.f;
-    gx[2][0] = -1.f; gx[2][1] = 0.f; gx[2][2] = 1.f;
-
-    gy[0][0] = -1.f; gy[0][1] = -2.f; gy[0][2] = -1.f;
-    gy[1][0] = 0.f;  gy[1][1] = 0.f;  gy[1][2] = 0.f;
-    gy[2][0] = 1.f;  gy[2][1] = 2.f;  gy[2][2] = 1.f;
 
     // Суммы интенсивностей
     float intensityX = 0.0f;
@@ -40,14 +41,14 @@ __global__ void sobelFilterTexture(float* output, cudaTextureObject_t texObj, in
             // Извлекаем значение пикселя из текстуры
             float value = tex2D<float>(texObj, nu, nv);
             
-            intensityX += gx[dy+1][dx+1]*value;
-            intensityY += gy[dy+1][dx+1]*value;
+            intensityX += gx_const[dy+1][dx+1]*value;
+            intensityY += gy_const[dy+1][dx+1]*value;
         }
     }
 
     // Рассчитываем абсолютную величину градиента
     float gradientMagnitude = sqrtf(intensityX*intensityX + intensityY*intensityY);
-    output[y * width + x] = fminf(gradientMagnitude, 1.0f); // Ограничиваем результатом диапазон [0..1]
+    output[y * width + x] = gradientMagnitude / (4.0f * sqrtf(2.0f));
 }
 
 

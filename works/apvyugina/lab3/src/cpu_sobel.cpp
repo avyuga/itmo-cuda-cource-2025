@@ -47,7 +47,7 @@ vector<float> applySobelCPU(const vector<float>& image, int width, int height)
             }
             
             float gradientMagnitude = sqrt(sumX*sumX + sumY*sumY);
-            result[y*width+x] = fminf(gradientMagnitude, 1.0f);
+            result[y*width+x] = gradientMagnitude / (4.0f * sqrtf(2.0f));
         }
     }
 
