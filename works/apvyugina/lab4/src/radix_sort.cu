@@ -122,6 +122,16 @@ void scatterKernel(T* input, T* output, uint32_t* scanResult, uint32_t* bits, in
     }
 }
 
+// Kernel to flip sign bit for signed integers (convert to unsigned representation)
+template<typename T>
+__global__
+void flipSignBitKernel(T* data, int n, T signBitMask) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        data[idx] ^= signBitMask;
+    }
+}
+
 
 void scanKernel(uint32_t* input, uint32_t* output, int n) {
     int numBlocks = (n + ELEMENTS_PER_BLOCK - 1) / ELEMENTS_PER_BLOCK;
@@ -208,10 +218,59 @@ void radixSortTemplate(T* d_input, T* d_output, int n) {
     cudaFree(d_scanResult);
 }
 
-void radixSort_int32(uint32_t* d_input, uint32_t* d_output, int n){
+
+
+void radixSort_uint32(uint32_t* d_input, uint32_t* d_output, int n){
     radixSortTemplate<uint32_t>(d_input, d_output, n);
 }
 
-void radixSort_int64(uint64_t* d_input, uint64_t* d_output, int n){
+void radixSort_uint64(uint64_t* d_input, uint64_t* d_output, int n){
     radixSortTemplate<uint64_t>(d_input, d_output, n);
+}
+
+// flip sign bit, sort as unsigned, flip back
+void radixSort_int32(int32_t* d_input, int32_t* d_output, int n){
+    const int32_t signBitMask = 0x80000000;
+    int blocksPerGrid = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    
+    // Allocate temporary buffer for sorting
+    uint32_t* d_temp;
+    cudaMalloc(&d_temp, n * sizeof(uint32_t));
+    
+    // Copy input to temp and flip sign bit to convert signed to unsigned representation
+    cudaMemcpy(d_temp, d_input, n * sizeof(int32_t), cudaMemcpyDeviceToDevice);
+    flipSignBitKernel<uint32_t><<<blocksPerGrid, THREADS_PER_BLOCK>>>((uint32_t*)d_temp, n, (uint32_t)signBitMask);
+    cudaDeviceSynchronize();
+    
+    // Sort as unsigned
+    radixSortTemplate<uint32_t>(d_temp, (uint32_t*)d_output, n);
+    
+    // Flip sign bit back to restore signed representation
+    flipSignBitKernel<int32_t><<<blocksPerGrid, THREADS_PER_BLOCK>>>(d_output, n, signBitMask);
+    cudaDeviceSynchronize();
+    
+    cudaFree(d_temp);
+}
+
+void radixSort_int64(int64_t* d_input, int64_t* d_output, int n){
+    const int64_t signBitMask = 0x8000000000000000LL;
+    int blocksPerGrid = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    
+    // Allocate temporary buffer for sorting
+    uint64_t* d_temp;
+    cudaMalloc(&d_temp, n * sizeof(uint64_t));
+    
+    // Copy input to temp and flip sign bit to convert signed to unsigned representation
+    cudaMemcpy(d_temp, d_input, n * sizeof(int64_t), cudaMemcpyDeviceToDevice);
+    flipSignBitKernel<uint64_t><<<blocksPerGrid, THREADS_PER_BLOCK>>>((uint64_t*)d_temp, n, (uint64_t)signBitMask);
+    cudaDeviceSynchronize();
+    
+    // Sort as unsigned
+    radixSortTemplate<uint64_t>(d_temp, (uint64_t*)d_output, n);
+    
+    // Flip sign bit back to restore signed representation
+    flipSignBitKernel<int64_t><<<blocksPerGrid, THREADS_PER_BLOCK>>>(d_output, n, signBitMask);
+    cudaDeviceSynchronize();
+    
+    cudaFree(d_temp);
 }
