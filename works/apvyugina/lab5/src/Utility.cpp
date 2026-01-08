@@ -63,7 +63,7 @@ vector<vector<Detection>> Utility::processOutput(float* output, int numImages, P
     for (int i=0; i < numImages; ++i){
         vector<Detection> result;
         for (int j=0; j < params.outputLength; ++j){
-            if (output[i * floatsPerImage + j * params.outputItemSize + 4] < 0.5) continue;
+            if (output[i * floatsPerImage + j * params.outputItemSize + 4] < confThreshold) continue;
             row_ptr = i * floatsPerImage + j * params.outputItemSize;
             // Scale normalized coordinates (0-1) to pixel coordinates
             result.push_back(

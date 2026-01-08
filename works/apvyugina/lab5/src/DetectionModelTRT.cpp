@@ -146,7 +146,6 @@ void DetectionModelTRT::detect(
     float*& rawOutput
 ){
     
-    cudaStream_t stream;
     cudaStreamCreate(&stream);
 
     nvinfer1::Dims4 inputDims = {imgList.size(), mParams.inputNChannels, mParams.inputHeight, mParams.inputWidth};
@@ -209,7 +208,7 @@ void DetectionModelTRT::detect(
         memcpy(rawOutput, hostOutputBuffer, outputSize * sizeof(float));
     }
     
-    cudaStreamDestroy(stream);
+    cudaStreamSynchronize(stream);
 }
 
 DetectionModelTRT::~DetectionModelTRT(){

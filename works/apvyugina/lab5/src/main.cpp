@@ -14,8 +14,7 @@ void detectOnRandomImages(
     const string& outputImageFolder,
     DetectionModelTRT& engine,
     Params p,
-    float confThreshold,
-    int batchSize
+    float confThreshold
 ){
     
     const filesystem::path img_folder{inputImageFolder};
@@ -39,12 +38,12 @@ void detectOnRandomImages(
     timer.tic();
     engine.detect(preprocessedImgList, rawOutput);
     double diff = timer.toc();
-    cout << "Batch size=" <<numberOfImages << " took " << diff  << " ms, "  <<
+    cout << "Batch size=" << numberOfImages << " took " << diff  << " ms, "  <<
         diff/numberOfImages << " ms/img" << endl;
 
-    vector<vector<Detection>> resultList = Utility::processOutput(rawOutput, batchSize, p, confThreshold);
+    vector<vector<Detection>> resultList = Utility::processOutput(rawOutput, numberOfImages, p, confThreshold);
         
-    for(int i = 0; i < batchSize; ++i){
+    for(int i = 0; i < numberOfImages; ++i){
         auto img = preprocessedImgList[i];
         auto result = resultList[i];
 
@@ -52,6 +51,8 @@ void detectOnRandomImages(
         cv::Mat resultImage = Utility::drawResult(img, result);
         cv::imwrite(filename, resultImage);
     }
+
+    delete[] rawOutput;
 }
 
 
@@ -184,8 +185,7 @@ int main(int argc, char** argv)
             "results/trt/",
             Engine,
             params,
-            0.6,
-            10
+            0.6
         );
     }
     else if (type == "video"){
